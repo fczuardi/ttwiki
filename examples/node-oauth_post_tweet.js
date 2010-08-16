@@ -1,8 +1,8 @@
 var sys = require('sys');
-var oauth = require('./lib/node-oauth/lib/oauth');
+var oauth = require('../lib/node-oauth/lib/oauth');
 
 try{
-  var twitter_api_tokens = require('./config/twitter').tokens;
+  var twitter_api_tokens = require('../config/twitter').tokens;
 }catch(e){
   console.log('Error: You need to setup your Twitter OAuth tokens. Edit the file /config/twitter-example.js and save it as /config/twitter.js');
   process.exit(1);
@@ -21,7 +21,7 @@ var consumer = oauth.createConsumer(key, secret);
 var token = oauth.createToken(atoken, asecret);
 var signer = oauth.createHmac(consumer, token);
 
-var body = { status: (''+new Date()) };
+var body = { status: ('abacate '+new Date()) };
 var request = client.request('POST','/1/statuses/update.json',null,body,signer);
 request.write(body);
 
