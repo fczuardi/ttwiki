@@ -1,5 +1,21 @@
 == Requirements
 * [[http://nodejs.org|node.js]] by Ryan Lienhart Dahl and [[http://github.com/ry/node/blob/master/AUTHORS|contributors]] (MIT License)
+* [[http://code.google.com/p/redis/|redis]] by Salvatore Sanfilippo and contributors (New BSD License)
+
+== Installation
+=== Getting the code
+{{{
+git clone git://github.com/fczuardi/ttwiki.git
+}}}
+=== Installing dependencies
+==== Redis
+A copy of Redis is included under the deps folder, you can compile and use it 
+if you don't have it.
+{{{
+cd deps/redis
+make
+make test
+}}}
 
 == External Libraries
 * [[http://github.com/unscene/node-oauth|node-oauth]] by Ryan Fairchild (MIT License)

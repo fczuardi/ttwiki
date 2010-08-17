@@ -17,6 +17,7 @@ var  API_URL = 'api.twitter.com'
     ,API_PORT = 443
     ,LOCAL_TRENDS_PATH = '/1/trends/'
     ,LOCAL_WOEID = '23424768' //Brasil
+    ,TIME_BETWEEN_TRENDS_REQUESTS = 5*60*1000 // 5 minutes see http://dev.twitter.com/doc/get/trends/:woeid
 
 //== Variables
 var  consumer = oauth.createConsumer(tw_config.CONSUMER_KEY, tw_config.CONSUMER_SECRET)
@@ -27,7 +28,7 @@ var  consumer = oauth.createConsumer(tw_config.CONSUMER_KEY, tw_config.CONSUMER_
     ,response_formats = ['json', 'xml'] //json output sometimes stop working, so we check both
     ,trends_request = {'xml':{},'json':{}}
     ,current_trends = {'xml':{},'json':{}}
-    ,last_trends = {'as_of': 0, 'body': '', 'rank': [] }
+    ,last_trends = {'as_of': 0, 'trends': [] }
     ,json_retrieving_interval
     ,xml_retrieving_interval;
 
@@ -35,20 +36,19 @@ var  consumer = oauth.createConsumer(tw_config.CONSUMER_KEY, tw_config.CONSUMER_
 
 //== init()
 function init(){
-  // http://dev.twitter.com/doc/get/trends/:woeid
-  // "This information is cached for 5 minutes. Requesting more frequently than 
-  // that will not return any more data, and will count against your rate limit usage."
+  //twitter sometimes stops updating the json list (http://twitter.com/fczuardi/status/21353558458)
+  //so we request xml and json alternating and use the most recent list of the two
   getCurrentTrends('xml');
-  json_retrieving_interval = setInterval(getCurrentTrends, 5*60*1000, 'xml');
+  json_retrieving_interval = setInterval(getCurrentTrends, TIME_BETWEEN_TRENDS_REQUESTS, 'xml');
   setTimeout(function(){
     getCurrentTrends('json');
-    json_retrieving_interval = setInterval(getCurrentTrends, 5*60*1000, 'json');
-  }, 2.5*60*1000);
+    json_retrieving_interval = setInterval(getCurrentTrends, TIME_BETWEEN_TRENDS_REQUESTS, 'json');
+  }, TIME_BETWEEN_TRENDS_REQUESTS/2);
 }
 
 //== getCurrentTrends()
 function getCurrentTrends(fmt){
-  current_trends[fmt] = {'as_of': 0, 'body': '', 'rank': []}
+  current_trends[fmt] = {'as_of': 0, 'body': '', 'trends': []}
   trends_request[fmt] = client.request('GET', LOCAL_TRENDS_PATH + LOCAL_WOEID + '.' + fmt, null, null, signer);
   trends_request[fmt].addListener('response', function(response) {
     var response_type = (response.headers['content-type'].indexOf('xml') != -1) ? 'xml' :
@@ -62,20 +62,20 @@ function getCurrentTrends(fmt){
     if (response_type == 'other') { return responseError(response, 'error', 'Wrong MIME Type.', '20324136363342404'); }
     // what to do when data comes in
     if (response_type == 'xml'){
-      proccessTrendsXML(response);
+      parseTrendsXML(response);
     }else {
-      proccessTrendsJSON(response);
+      parseTrendsJSON(response);
     }
   });
   trends_request[fmt].end(); //make the request
 }
+
 //== proccessTrendsXML()
-function proccessTrendsXML(response) {
+function parseTrendsXML(response) {
   response.addListener('data', function (chunk) {
     current_trends['xml']['body'] += chunk;
   });
   response.addListener('end', function () {
-    // console.log(current_trends['xml']['body'])
     var as_of_re = /as_of="([^"]*)"/gim;
     var as_of_matches = as_of_re.exec(current_trends['xml']['body']);
     var as_of = Date.parse(as_of_matches[1]);
@@ -86,49 +86,50 @@ function proccessTrendsXML(response) {
     //<trend query="Ursinhos+Carinhosos" url="http://search.twitter.com/search?q=Ursinhos+Carinhosos">Ursinhos Carinhosos</trend>
     var trend_re = /<trend[^>]*>[^<]*<\/trend>/gim;
     var trend_matches = current_trends['xml']['body'].match(trend_re);
-    var trend_name_re = /<trend[^>]*>([^<]*)<\/trend>/i;
+    var trend_data_re = /<trend\s*query="([^"]*)"\surl="([^"]*)"[^>]*>([^<]*)<\/trend>/i;
     for (i=0;i<trend_matches.length;i++){
-      current_trends['xml']['rank'].push(trend_name_re.exec(trend_matches[i])[1]);
+      var trend_data_matches = trend_data_re.exec(trend_matches[i]);
+      current_trends['xml']['trends'].push({
+         'name': trend_data_matches[3]
+        ,'query': trend_data_matches[1]
+        ,'url': trend_data_matches[2]
+        });
     }
-    console.log(trend_matches);
-    console.log(as_of)
     current_trends['xml']['as_of'] = as_of;
     last_trends = current_trends['xml'];
-    console.log(current_trends['xml'])
+    trendsParsed(current_trends['xml']);
   });
 }
+
 //== proccessTrendsJSON()
-function proccessTrendsJSON(response){
+function parseTrendsJSON(response){
   response.addListener('data', function (chunk) {
     current_trends['json']['body'] += chunk;
   });
   response.addListener('end', function () {
-    // console.log('BODY: ' + current_trends['json']['body']);
-    result = JSON.parse(current_trends['json']['body'])[0];
-    if (!result['as_of']){ 
-      console.log('== ERROR: something went wrong (9761156134773046) ==');
-      return false 
+    //error handling
+    try{
+      result = JSON.parse(current_trends['json']['body'])[0];
+    }catch(e){
+      return responseContentError(result, 'error', 'Could not parse JSON.', '05745784239843488');
     }
+    if (!result['as_of']){ return responseContentError(result, 'error', 'Response doesn’t have timestamp.', '9761156134773046'); }
     var as_of = Date.parse(result['as_of'])
-    if (as_of <= last_trends['as_of']){ 
-      console.log(as_of+' so skip');
-      return false
-    }
-    if (!result['trends']){
-      console.log('== ERROR: something went wrong (8779761055484414) ==');
-      return false
-    }
+    if (as_of <= last_trends['as_of']){ return responseContentError(result, 'info', 'The result we have is newer than this one, skip it.', '3963864736724645'); }
+    if (!result['trends']){ return responseContentError(result, 'error', 'Response doesn’t have trends list.', '8779761055484414'); }
+    //build ranking
     for (i=0;i<result['trends'].length;i++){
-      current_trends['json']['rank'].push(result['trends'][i]['name']);
+      current_trends['json']['trends'].push(result['trends'][i]);
     }
     current_trends['json']['as_of'] = as_of;
-    console.log(current_trends['json']);
-    console.log("last_trends['as_of'] == current_trends['as_of'] ? "+(last_trends['as_of'] == current_trends['json']['as_of']));
-    console.log("last_trends['body'] == current_trends['body'] ? "+(last_trends['body'] == current_trends['json']['body']));
     last_trends = current_trends['json'];
-    console.log(Date.parse(current_trends['json']['as_of']));
-    console.log('==================================================');
+    trendsParsed(current_trends['json']);
   });
+}
+
+//== trendsParsed()
+function trendsParsed(content){
+  console.log(content)
 }
 
 init();
@@ -139,5 +140,12 @@ function responseError(response, type, msg, code){
   console.log('== %s: %s (%s) ==', type.toUpperCase(), msg, code);
   console.log(response.statusCode);
   console.log(response.headers);
+  return false;
+}
+function responseContentError(result, type, msg, code){
+  console.log('== %s: %s (%s) ==', type.toUpperCase(), msg, code);
+  if (type == 'error') {
+    console.log(result);
+  }
   return false;
 }
