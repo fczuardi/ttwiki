@@ -3,3 +3,4 @@
 
 == External Libraries
 * [[http://github.com/unscene/node-oauth|node-oauth]] by Ryan Fairchild (MIT License)
+* [[http://github.com/visionmedia/growl|Growl for nodejs]] by TJ Holowaychuk (MIT License)
