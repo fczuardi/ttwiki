@@ -1,6 +1,6 @@
 == Requirements
 * [[http://nodejs.org|node.js]] by Ryan Lienhart Dahl and [[http://github.com/ry/node/blob/master/AUTHORS|contributors]] (MIT License)
-* [[http://code.google.com/p/redis/|redis]] by Salvatore Sanfilippo and contributors (New BSD License)
+* [[http://code.google.com/p/redis/|redis]] by Salvatore Sanfilippo and [[http://github.com/antirez/redis/raw/master/doc/Credits.html|contributors]] (New BSD License)
 
 == Installation
 === Getting the code
