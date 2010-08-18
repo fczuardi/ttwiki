@@ -1,12 +1,14 @@
 //= Globals
 
 //== Libraries
-var  growl = require('./lib/node-growl/lib/growl')
-    ,oauth = require('./lib/node-oauth/lib/oauth');
+var  sys = require('sys')
+    ,exec = require('child_process').exec
+    ,growl = require('../lib/node-growl/lib/growl')
+    ,oauth = require('../lib/node-oauth/lib/oauth');
 
 //== Config
 try{
-  var tw_config = require('./config/twitter').tokens;
+  var tw_config = require('../config/twitter').tokens;
 }catch(e){
   console.log('Error: You need to setup your Twitter OAuth tokens. Edit the file /config/twitter-example.js and save it as /config/twitter.js');
   process.exit(1);
@@ -129,7 +131,20 @@ function parseTrendsJSON(response){
 
 //== trendsParsed()
 function trendsParsed(content){
-  console.log(content)
+  console.log(JSON.stringify(content['trends']))
+  var test_script = exec('node post_redisdb_trendlist.js'
+      ,{env: {
+         TRENDS: JSON.stringify(content['trends'])
+        ,AS_OF: content['as_of']
+      }}
+      ,function (error, stdout, stderr) {
+      if (error !== null) {
+        console.log('exec error: ' + error);
+      }
+      console.log(stdout);
+      if (stderr) console.log(stderr);
+    });
+  //
 }
 
 init();

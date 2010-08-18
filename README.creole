@@ -17,6 +17,12 @@ make
 make test
 }}}
 
+== How to use it
+{{{
+node bin/manage.js
+}}}
+
 == External Libraries
 * [[http://github.com/unscene/node-oauth|node-oauth]] by Ryan Fairchild (MIT License)
 * [[http://github.com/visionmedia/growl|Growl for nodejs]] by TJ Holowaychuk (MIT License)
+* [[http://github.com/fictorial/redis-node-client|redis-node-client]] by Fictorial LLC (MIT License)
