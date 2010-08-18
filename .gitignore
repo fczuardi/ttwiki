@@ -1,1 +1,4 @@
 config/twitter.js
+config/redis.conf
+run/redis.pid
+data/trends.rdb
