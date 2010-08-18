@@ -18,15 +18,20 @@ try{
 var  API_URL = 'api.twitter.com'
     ,API_PORT = 443
     ,LOCAL_TRENDS_PATH = '/1/trends/'
-    ,LOCAL_WOEID = '23424768' //Brasil
-    ,TIME_BETWEEN_TRENDS_REQUESTS = 5*60*1000 // 5 minutes see http://dev.twitter.com/doc/get/trends/:woeid
+    ,MIN_TIME_BETWEEN_TRENDS_REQUESTS = 5*60*1000 // 5 minutes see http://dev.twitter.com/doc/get/trends/:woeid
+    ,KNOWN_WOEIDS = {
+       '1': 'Worldwide'
+      ,'23424768': 'Brazil'
+      ,'455827': 'São Paulo'
+      ,'23424977': 'United States'
+      ,'2487956': 'San Francisco'
+    }
 
 //== Variables
 var  consumer = oauth.createConsumer(tw_config.CONSUMER_KEY, tw_config.CONSUMER_SECRET)
     ,token = oauth.createToken(tw_config.OAUTH_TOKEN, tw_config.OAUTH_TOKEN_SECRET)
     ,signer = oauth.createHmac(consumer, token)
     ,client = oauth.createClient(API_PORT, API_URL , true)
-    ,woeid = '23424768' //brasil
     ,response_formats = ['json', 'xml'] //json output sometimes stop working, so we check both
     ,trends_request = {'xml':{},'json':{}}
     ,current_trends = {'xml':{},'json':{}}
@@ -34,34 +39,78 @@ var  consumer = oauth.createConsumer(tw_config.CONSUMER_KEY, tw_config.CONSUMER_
     ,json_retrieving_interval
     ,xml_retrieving_interval;
 
-//= Main
+//== Default options
+var options = {
+   'run_once' : true
+  ,'woeid' : '23424768'
+  ,'verbose' : false
+  ,'interval': MIN_TIME_BETWEEN_TRENDS_REQUESTS
+}
+
+//= Command Line Options
+switch(process.argv[2]){
+  case '-h': print_help(); break;
+  case undefined: run_once(); break;
+}
+
+//== Manual
+function print_help(){
+  console.log(
+'\nTwitter Trending Topics Client v0.1\
+\n\
+\nSYNOPSIS:\
+\n\tnode '+ __filename.substring(__dirname.length+1, __filename.length) +' woeid\
+\n\
+\nARGUMENTS:\n\
+\twoeid: The woeid code for the location you want to get the trendlist. \
+Ex:23424768 (Brazil), 1 (Worldwide)\
+\n\n');
+}
+
+//== Default Header
+function print_default_header(){
+  console.log('\
+\nTwitter Trending Topics Client v0.1\
+\n-----------------------------------\
+\nCheck the HELP page: node '+ __filename.substring(__dirname.length+1, __filename.length) +' -h\
+\n');
+}
+
+//= Functions
+function run_once(){
+  options['run_once'] = true;
+  print_default_header();
+  getCurrentTrends('xml');
+  // getCurrentTrends('json');
+}
 
 //== init()
 function init(){
   //twitter sometimes stops updating the json list (http://twitter.com/fczuardi/status/21353558458)
   //so we request xml and json alternating and use the most recent list of the two
   getCurrentTrends('xml');
-  json_retrieving_interval = setInterval(getCurrentTrends, TIME_BETWEEN_TRENDS_REQUESTS, 'xml');
+  json_retrieving_interval = setInterval(getCurrentTrends, options['interval'], 'xml');
   setTimeout(function(){
     getCurrentTrends('json');
-    json_retrieving_interval = setInterval(getCurrentTrends, TIME_BETWEEN_TRENDS_REQUESTS, 'json');
-  }, TIME_BETWEEN_TRENDS_REQUESTS/2);
+    json_retrieving_interval = setInterval(getCurrentTrends, options['interval'], 'json');
+  }, opetions['interval']/2);
 }
 
 //== getCurrentTrends()
 function getCurrentTrends(fmt){
-  current_trends[fmt] = {'as_of': 0, 'body': '', 'trends': []}
-  trends_request[fmt] = client.request('GET', LOCAL_TRENDS_PATH + LOCAL_WOEID + '.' + fmt, null, null, signer);
+  current_trends[fmt] = {'as_of': 0, 'body': '', 'remaining_calls': 0, 'trends': []}
+  trends_request[fmt] = client.request('GET', LOCAL_TRENDS_PATH + options['woeid'] + '.' + fmt, null, null, signer);
   trends_request[fmt].addListener('response', function(response) {
     var response_type = (response.headers['content-type'].indexOf('xml') != -1) ? 'xml' :
                         ((response.headers['content-type'].indexOf('json') != -1) ? 'json' : 'other')
     response.setEncoding('utf8');
     // notify
-    growl.notify(response.headers["x-ratelimit-remaining"]+' calls left.', { title: 'TTWiki' }, function(){});
+    // growl.notify(response.headers["x-ratelimit-remaining"]+' calls left.', { title: 'TTWiki' }, function(){});
     // error handling
     if (response.statusCode != 200) { return responseError(response, 'error', 'Request failed.', '8309740116819739'); }
     if (response.headers["x-ratelimit-remaining"] < 100) { responseError(response, 'warning', 'We are reaching the limit!!', ('7925415213685483')) }
     if (response_type == 'other') { return responseError(response, 'error', 'Wrong MIME Type.', '20324136363342404'); }
+    current_trends[fmt]['remaining_calls'] = response.headers["x-ratelimit-remaining"];
     // what to do when data comes in
     if (response_type == 'xml'){
       parseTrendsXML(response);
@@ -131,6 +180,17 @@ function parseTrendsJSON(response){
 
 //== trendsParsed()
 function trendsParsed(content){
+  if (options['run_once']){
+    var as_of_date = new Date(content['as_of']);
+      // outputtext += "<b>GMT</b>: "+datum.toGMTString()+"<br/><b>Your timezone</b>: "+;
+    console.log('Trending Topics (as of %s)\nLocation: %s\n', as_of_date.toLocaleString(), KNOWN_WOEIDS[options['woeid']])
+    for (i=0;i<content['trends'].length;i++){
+      console.log('%s. %s - %s', (i+1), content['trends'][i]['name'],content['trends'][i]['url']);
+    }
+    console.log('\n(%s API calls remaining)', content['remaining_calls'])
+    sys.puts('\n');
+    process.exit(0);
+  }
   console.log(JSON.stringify(content['trends']))
   var test_script = exec('node post_redisdb_trendlist.js'
       ,{env: {
@@ -146,8 +206,6 @@ function trendsParsed(content){
     });
   //
 }
-
-init();
 
 //= Helpers
 //== responseError()

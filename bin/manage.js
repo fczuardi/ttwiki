@@ -49,7 +49,9 @@ function kill_redis(){
 
 function print_help(){
   console.log(
-'\n\nUsage: node '+ __filename.substring(__dirname.length+1, __filename.length) +' [command]\n\n\
+'\nTTWiki Manager v0.1\
+\n\
+\nUsage: node '+ __filename.substring(__dirname.length+1, __filename.length) +' [command]\n\n\
 Commands:\n\
 \tdbstart: Start the database daemon.\n\
 \tdbstop:  Stop the database daemon.\

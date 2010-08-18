@@ -1,0 +1,6 @@
+= Scripts
+
+== /bin/get_twitter_trendlist.js
+
+* fallback to unauthenticated GET if OAuth config is not present
+** Warn user that she could have a bigger limit if the config was there
