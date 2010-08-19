@@ -26,6 +26,16 @@ var  API_URL = 'api.twitter.com'
       ,'23424977': 'United States'
       ,'2487956': 'San Francisco'
     }
+    ,KNOWN_COUNTRY_CODES = {
+       'BR': '23424768'
+      ,'CA': '23424775'
+      ,'IE': '23424803'
+      ,'MX': '23424900'
+      ,'GB': '23424975'
+      ,'US': '2487796'
+    }
+    ,SCRIPT_TITLE = '\nTwitter Trending Topics Client v0.1\n-----------------------------------';
+    
 
 //== Variables
 var  consumer = oauth.createConsumer(tw_config.CONSUMER_KEY, tw_config.CONSUMER_SECRET)
@@ -42,7 +52,7 @@ var  consumer = oauth.createConsumer(tw_config.CONSUMER_KEY, tw_config.CONSUMER_
 //== Default options
 var options = {
    'run_once' : true
-  ,'woeid' : '23424768'
+  ,'woeid' : '1'
   ,'verbose' : false
   ,'interval': MIN_TIME_BETWEEN_TRENDS_REQUESTS
 }
@@ -55,9 +65,7 @@ switch(process.argv[2]){
 
 //== Manual
 function print_help(){
-  console.log(
-'\nTwitter Trending Topics Client v0.1\
-\n\
+  console.log(SCRIPT_TITLE+'\n\
 \nSYNOPSIS:\
 \n\tnode '+ __filename.substring(__dirname.length+1, __filename.length) +' woeid\
 \n\
@@ -69,9 +77,7 @@ Ex:23424768 (Brazil), 1 (Worldwide)\
 
 //== Default Header
 function print_default_header(){
-  console.log('\
-\nTwitter Trending Topics Client v0.1\
-\n-----------------------------------\
+  console.log(SCRIPT_TITLE+'\n\
 \nCheck the HELP page: node '+ __filename.substring(__dirname.length+1, __filename.length) +' -h\
 \n');
 }
@@ -185,7 +191,7 @@ function trendsParsed(content){
       // outputtext += "<b>GMT</b>: "+datum.toGMTString()+"<br/><b>Your timezone</b>: "+;
     console.log('Trending Topics (as of %s)\nLocation: %s\n', as_of_date.toLocaleString(), KNOWN_WOEIDS[options['woeid']])
     for (i=0;i<content['trends'].length;i++){
-      console.log('%s. %s - %s', (i+1), content['trends'][i]['name'],content['trends'][i]['url']);
+      console.log('%s. %s - %s', (i+1), entitiesToChar(content['trends'][i]['name']),content['trends'][i]['url']);
     }
     console.log('\n(%s API calls remaining)', content['remaining_calls'])
     sys.puts('\n');
@@ -208,6 +214,13 @@ function trendsParsed(content){
 }
 
 //= Helpers
+//== entitiesToChar()
+function entitiesToChar(text){
+  // Convert Decimal numeric character references ex: &#195; to Ã
+  text = text.replace(/&#([0-9]{1,7});/g, function(match, submatch) { return String.fromCharCode(submatch);} );
+  return text;
+}
+
 //== responseError()
 function responseError(response, type, msg, code){
   console.log('== %s: %s (%s) ==', type.toUpperCase(), msg, code);
