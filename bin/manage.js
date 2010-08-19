@@ -18,7 +18,7 @@ var  redis_pid_file = path.join(PROJECT_ROOT, 'run', 'redis.pid')
       ,'dbfilename dump.rdb': 'dbfilename ' + redis_db_file    
     };
 
-function start_redis(){
+function startRedis(){
   // read redis default configuration parameters
   redis_default_config = path.join('.', 'deps', 'redis', 'redis.conf');
   fs.readFile(redis_default_config, 'utf-8', function (err, data) {
@@ -37,7 +37,7 @@ function start_redis(){
   });
 }
 
-function kill_redis(){
+function killRedis(){
   path.exists(redis_pid_file, function(exists){
     if (!exists) process.exit(0);
     fs.readFile(redis_pid_file, 'utf-8', function (err, data) {
@@ -47,7 +47,7 @@ function kill_redis(){
   });
 }
 
-function print_help(){
+function printHelp(){
   console.log(
 '\nTTWiki Manager v0.1\
 \n\
@@ -58,7 +58,7 @@ Commands:\n\
 \n\n');
 }
 switch(process.argv[2]){
-  case 'dbstart': start_redis(); break;
-  case 'dbstop': kill_redis(); break;
-  case undefined: print_help(); break;
+  case 'dbstart': startRedis(); break;
+  case 'dbstop': killRedis(); break;
+  case undefined: printHelp(); break;
 }

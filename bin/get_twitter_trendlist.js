@@ -3,15 +3,15 @@
 //== Libraries
 var  sys = require('sys')
     ,exec = require('child_process').exec
+    ,spawn = require('child_process').spawn
     ,growl = require('../lib/node-growl/lib/growl')
     ,oauth = require('../lib/node-oauth/lib/oauth');
 
-//== Config
+//== Twitter OAuth Config
 try{
   var tw_config = require('../config/twitter').tokens;
 }catch(e){
-  console.log('Error: You need to setup your Twitter OAuth tokens. Edit the file /config/twitter-example.js and save it as /config/twitter.js');
-  process.exit(1);
+  printAndExit('Error: You need to setup your Twitter OAuth tokens. Edit the file /config/twitter-example.js and save it as /config/twitter.js', 1);
 }
 
 //== Constants
@@ -22,17 +22,35 @@ var  API_URL = 'api.twitter.com'
     ,KNOWN_WOEIDS = {
        '1': 'Worldwide'
       ,'23424768': 'Brazil'
-      ,'455827': 'São Paulo'
       ,'23424977': 'United States'
-      ,'2487956': 'San Francisco'
+      ,'23424975': 'United Kingdom'
+      ,'23424900': 'Mexico'
+      ,'23424803': 'Ireland'
+      ,'23424775': 'Canada'
+      ,'2358820': 'Baltimore, United States'
+      ,'2367105': 'Boston, United States'
+      ,'2514815': 'Washington, United States'
+      ,'2459115': 'New York, United States'
+      ,'2487796': 'San Antonio, United States'
+      ,'2379574': 'Chicago, United States'
+      ,'2471217': 'Philadelphia, United States'
+      ,'2487956': 'San Francisco, United States'
+      ,'2442047': 'Los Angeles, United States'
+      ,'2424766': 'Houston, United States'
+      ,'2357024': 'Atlanta, United States'
+      ,'2406080': 'Fort Worth, United States'
+      ,'2388929': 'Dallas, United States'
+      ,'2490383': 'Seattle, United States'
+      ,'455827': 'São Paulo, Brazil'
+      ,'44418': 'London, United Kingdom'
     }
     ,KNOWN_COUNTRY_CODES = {
-       'BR': '23424768'
-      ,'CA': '23424775'
-      ,'IE': '23424803'
-      ,'MX': '23424900'
-      ,'GB': '23424975'
-      ,'US': '2487796'
+       'br': '23424768'
+      ,'ca': '23424775'
+      ,'gb': '23424975'
+      ,'ie': '23424803'
+      ,'mx': '23424900'
+      ,'us': '23424977'
     }
     ,SCRIPT_TITLE = '\nTwitter Trending Topics Client v0.1\n-----------------------------------';
     
@@ -59,33 +77,51 @@ var options = {
 
 //= Command Line Options
 switch(process.argv[2]){
-  case '-h': print_help(); break;
-  case undefined: run_once(); break;
+  case '-h': printHelp(); break;
+  case undefined: runOnce(); break;
 }
 
 //== Manual
-function print_help(){
-  console.log(SCRIPT_TITLE+'\n\
-\nSYNOPSIS:\
-\n\tnode '+ __filename.substring(__dirname.length+1, __filename.length) +' woeid\
+function printHelp(){
+  var country_codes = [];
+  for(code in KNOWN_COUNTRY_CODES){
+    country_codes.push(code +' - '+KNOWN_WOEIDS[KNOWN_COUNTRY_CODES[code]]);
+  }
+  var woeids = [];
+  for(woeid in KNOWN_WOEIDS){
+    woeids.push(woeid +' - '+KNOWN_WOEIDS[woeid]);
+  }
+  var help_text = SCRIPT_TITLE+'\n\
+\nUsage:\
+\n\tnode '+ __filename.substring(__dirname.length+1, __filename.length) +' [option value] [option value] ...\
 \n\
-\nARGUMENTS:\n\
-\twoeid: The woeid code for the location you want to get the trendlist. \
-Ex:23424768 (Brazil), 1 (Worldwide)\
-\n\n');
+\nOptions:\
+\n\t-l/--location:\
+\n\t\tDefault value: '+options['woeid']+'\
+\n\t\tTwo letter country code or the woeid code for the location you want.\
+\n\
+\n\t\tThe currently supported country codes are:\n\t\t\t'+ country_codes.join('\n\t\t\t') +'\
+\n\
+\n\t\tSome known woeid codes:\n\t\t\t'+ woeids.join('\n\t\t\t') +'\
+\n\
+\n\t\tFor an up-to-date list of locations provided by Twitter, access:\
+\n\t\t\tcurl http://api.twitter.com/1/trends/available.xml\
+\n\n';
+   
+  printAndExit(help_text, 0);
 }
 
 //== Default Header
-function print_default_header(){
+function printDefaultHeader(){
   console.log(SCRIPT_TITLE+'\n\
 \nCheck the HELP page: node '+ __filename.substring(__dirname.length+1, __filename.length) +' -h\
 \n');
 }
 
 //= Functions
-function run_once(){
+function runOnce(){
   options['run_once'] = true;
-  print_default_header();
+  printDefaultHeader();
   getCurrentTrends('xml');
   // getCurrentTrends('json');
 }
@@ -95,10 +131,10 @@ function init(){
   //twitter sometimes stops updating the json list (http://twitter.com/fczuardi/status/21353558458)
   //so we request xml and json alternating and use the most recent list of the two
   getCurrentTrends('xml');
-  json_retrieving_interval = setInterval(getCurrentTrends, options['interval'], 'xml');
+  json_retrieving_interval = setInterval(get_current_trends, options['interval'], 'xml');
   setTimeout(function(){
     getCurrentTrends('json');
-    json_retrieving_interval = setInterval(getCurrentTrends, options['interval'], 'json');
+    json_retrieving_interval = setInterval(get_current_trends, options['interval'], 'json');
   }, opetions['interval']/2);
 }
 
@@ -127,7 +163,7 @@ function getCurrentTrends(fmt){
   trends_request[fmt].end(); //make the request
 }
 
-//== proccessTrendsXML()
+//== parseTrendsXML()
 function parseTrendsXML(response) {
   response.addListener('data', function (chunk) {
     current_trends['xml']['body'] += chunk;
@@ -158,7 +194,7 @@ function parseTrendsXML(response) {
   });
 }
 
-//== proccessTrendsJSON()
+//== parseTrendsJSON()
 function parseTrendsJSON(response){
   response.addListener('data', function (chunk) {
     current_trends['json']['body'] += chunk;
@@ -188,14 +224,14 @@ function parseTrendsJSON(response){
 function trendsParsed(content){
   if (options['run_once']){
     var as_of_date = new Date(content['as_of']);
-      // outputtext += "<b>GMT</b>: "+datum.toGMTString()+"<br/><b>Your timezone</b>: "+;
-    console.log('Trending Topics (as of %s)\nLocation: %s\n', as_of_date.toLocaleString(), KNOWN_WOEIDS[options['woeid']])
+    var output = '';
+    output += 'Trending Topics (as of '+ as_of_date.toLocaleString() +')\nLocation: '+ KNOWN_WOEIDS[options['woeid']] +'\n\n'
     for (i=0;i<content['trends'].length;i++){
-      console.log('%s. %s - %s', (i+1), entitiesToChar(content['trends'][i]['name']),content['trends'][i]['url']);
+      output += (i+1) + '. ' + entitiesToChar(content['trends'][i]['name']) + ' - ' + content['trends'][i]['url'] +'\n';
     }
-    console.log('\n(%s API calls remaining)', content['remaining_calls'])
-    sys.puts('\n');
-    process.exit(0);
+    output += '\n('+ content['remaining_calls'] +' API calls remaining)\n\n';
+    printAndExit(output, 0);
+    return true;
   }
   console.log(JSON.stringify(content['trends']))
   var test_script = exec('node post_redisdb_trendlist.js'
@@ -214,6 +250,14 @@ function trendsParsed(content){
 }
 
 //= Helpers
+//== printAndExit()
+function printAndExit(msg, exitcode){
+  exitcode = (exitcode == undefined) ? 0 : exitcode;
+  process.stdout.end(msg);
+  process.stdout.addListener('close', function(){
+    process.exit(exitcode);
+  });
+}
 //== entitiesToChar()
 function entitiesToChar(text){
   // Convert Decimal numeric character references ex: &#195; to Ã
