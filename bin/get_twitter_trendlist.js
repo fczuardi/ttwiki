@@ -4,19 +4,14 @@
 var  sys = require('sys')
     ,exec = require('child_process').exec
     ,spawn = require('child_process').spawn
-    ,growl = require('../lib/node-growl/lib/growl')
-    ,oauth = require('../lib/node-oauth/lib/oauth');
-
-//== Twitter OAuth Config
-try{
-  var tw_config = require('../config/twitter').tokens;
-}catch(e){
-  printAndExit('Error: You need to setup your Twitter OAuth tokens. Edit the file /config/twitter-example.js and save it as /config/twitter.js', 1);
-}
+    ,http = require('http')
+    ,oauth = require('../lib/node-oauth/lib/oauth')
+    ,growl = require('../lib/node-growl/lib/growl');
 
 //== Constants
 var  API_URL = 'api.twitter.com'
-    ,API_PORT = 443
+    ,API_PORT = 80
+    ,API_PORT_SSL = 443
     ,LOCAL_TRENDS_PATH = '/1/trends/'
     ,MIN_TIME_BETWEEN_TRENDS_REQUESTS = 5*60*1000 // 5 minutes see http://dev.twitter.com/doc/get/trends/:woeid
     ,KNOWN_WOEIDS = {
@@ -52,15 +47,27 @@ var  API_URL = 'api.twitter.com'
       ,'mx': '23424900'
       ,'us': '23424977'
     }
-    ,SCRIPT_TITLE = '\nTwitter Trending Topics Client v0.1\n-----------------------------------';
-    
+    ,SCRIPT_TITLE = '\nTwitter Trending Topics Client v0.1'+
+                    '\n-----------------------------------';
+
+//== Header
+printDefaultHeader();
+
+//== Twitter OAuth Config (/config/twitter.js)
+try{
+  var tw_config = require('../config/twitter').tokens;
+  var  consumer = oauth.createConsumer(tw_config.CONSUMER_KEY, tw_config.CONSUMER_SECRET)
+      ,token = oauth.createToken(tw_config.OAUTH_TOKEN, tw_config.OAUTH_TOKEN_SECRET)
+      ,signer = oauth.createHmac(consumer, token)
+      ,client = oauth.createClient(API_PORT_SSL, API_URL , true);
+}catch(e){
+  // printAndExit('Error: You need to setup your Twitter OAuth tokens. Edit the file /config/twitter-example.js and save it as /config/twitter.js\n\n', 1);
+  console.log('TIP: You can raise the API calls limit by setting up your Twitter OAuth tokens. Edit the file /config/twitter-example.js and save it as /config/twitter.js\n')
+  client = http.createClient(API_PORT, API_URL , false);
+}
 
 //== Variables
-var  consumer = oauth.createConsumer(tw_config.CONSUMER_KEY, tw_config.CONSUMER_SECRET)
-    ,token = oauth.createToken(tw_config.OAUTH_TOKEN, tw_config.OAUTH_TOKEN_SECRET)
-    ,signer = oauth.createHmac(consumer, token)
-    ,client = oauth.createClient(API_PORT, API_URL , true)
-    ,response_formats = ['json', 'xml'] //json output sometimes stop working, so we check both
+var  response_formats = ['json', 'xml'] //json output sometimes stop working, so we check both
     ,trends_request = {'xml':{},'json':{}}
     ,current_trends = {'xml':{},'json':{}}
     ,last_trends = {'as_of': 0, 'trends': [] }
@@ -121,7 +128,6 @@ function printDefaultHeader(){
 //= Functions
 function runOnce(){
   options['run_once'] = true;
-  printDefaultHeader();
   getCurrentTrends('xml');
   // getCurrentTrends('json');
 }
@@ -141,7 +147,11 @@ function init(){
 //== getCurrentTrends()
 function getCurrentTrends(fmt){
   current_trends[fmt] = {'as_of': 0, 'body': '', 'remaining_calls': 0, 'trends': []}
-  trends_request[fmt] = client.request('GET', LOCAL_TRENDS_PATH + options['woeid'] + '.' + fmt, null, null, signer);
+  if (tw_config){
+    trends_request[fmt] = client.request('GET', LOCAL_TRENDS_PATH + options['woeid'] + '.' + fmt, null, null, signer);
+  } else {
+    trends_request[fmt] = client.request('GET', LOCAL_TRENDS_PATH + options['woeid'] + '.' + fmt, {'host': API_URL});
+  }
   trends_request[fmt].addListener('response', function(response) {
     var response_type = (response.headers['content-type'].indexOf('xml') != -1) ? 'xml' :
                         ((response.headers['content-type'].indexOf('json') != -1) ? 'json' : 'other')
@@ -180,6 +190,7 @@ function parseTrendsXML(response) {
     var trend_re = /<trend[^>]*>[^<]*<\/trend>/gim;
     var trend_matches = current_trends['xml']['body'].match(trend_re);
     var trend_data_re = /<trend\s*query="([^"]*)"\surl="([^"]*)"[^>]*>([^<]*)<\/trend>/i;
+    if (!trend_matches) { return responseContentError(current_trends['xml']['body'], 'error', 'XML contains no trends.', '5253734595607966');}
     for (i=0;i<trend_matches.length;i++){
       var trend_data_matches = trend_data_re.exec(trend_matches[i]);
       current_trends['xml']['trends'].push({
@@ -210,6 +221,7 @@ function parseTrendsJSON(response){
     var as_of = Date.parse(result['as_of'])
     if (as_of <= last_trends['as_of']){ return responseContentError(result, 'info', 'The result we have is newer than this one, skip it.', '3963864736724645'); }
     if (!result['trends']){ return responseContentError(result, 'error', 'Response doesn’t have trends list.', '8779761055484414'); }
+    if (result['trends'].length == 0){ return responseContentError(result, 'error', 'Response trends list is empty.', '6612175547052175'); }
     //build ranking
     for (i=0;i<result['trends'].length;i++){
       current_trends['json']['trends'].push(result['trends'][i]);
@@ -250,6 +262,7 @@ function trendsParsed(content){
 }
 
 //= Helpers
+
 //== printAndExit()
 function printAndExit(msg, exitcode){
   exitcode = (exitcode == undefined) ? 0 : exitcode;
@@ -258,6 +271,7 @@ function printAndExit(msg, exitcode){
     process.exit(exitcode);
   });
 }
+
 //== entitiesToChar()
 function entitiesToChar(text){
   // Convert Decimal numeric character references ex: &#195; to Ã
@@ -272,6 +286,8 @@ function responseError(response, type, msg, code){
   console.log(response.headers);
   return false;
 }
+
+//== responseContentError()
 function responseContentError(result, type, msg, code){
   console.log('== %s: %s (%s) ==', type.toUpperCase(), msg, code);
   if (type == 'error') {
