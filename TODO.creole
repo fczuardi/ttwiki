@@ -2,4 +2,3 @@
 
 == /bin/get_twitter_trendlist.js
 
-* implement -l/--location option support

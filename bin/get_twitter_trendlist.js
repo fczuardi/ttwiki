@@ -47,8 +47,11 @@ var  API_URL = 'api.twitter.com'
       ,'mx': '23424900'
       ,'us': '23424977'
     }
-    ,SCRIPT_TITLE = '\nTwitter Trending Topics Client v0.1'+
-                    '\n-----------------------------------';
+    ,SCRIPT_NAME = 'Twitter Trending Topics Client'
+    ,SCRIPT_VERSION = 'v0.1'
+    ,SCRIPT_SOURCE_CODE_URL = 'http://github.com/fczuardi/ttwiki'
+    ,SCRIPT_TITLE = '\n'+SCRIPT_NAME+' '+SCRIPT_VERSION+
+                    '\n-----------------------------------\n';
 
 //== Header
 printDefaultHeader();
@@ -72,7 +75,9 @@ var  response_formats = ['json', 'xml'] //json output sometimes stop working, so
     ,current_trends = {'xml':{},'json':{}}
     ,last_trends = {'as_of': 0, 'trends': [] }
     ,json_retrieving_interval
-    ,xml_retrieving_interval;
+    ,xml_retrieving_interval
+    ,invalid_syntax = false
+    ,options_callbacks = [];
 
 //== Default options
 var options = {
@@ -83,10 +88,41 @@ var options = {
 }
 
 //= Command Line Options
-switch(process.argv[2]){
-  case '-h': printHelp(); break;
-  case undefined: runOnce(); break;
+valid_arguments = [
+   {'name': /^(-h|--help)$/, 'expected': null, 'callback': printHelp}
+  ,{'name': /^(-l|--location)$/, 'expected': /^([A-Za-z]{2}|[0-9]+)$/, 'callback': changeLocation}
+];
+if (process.argv.length <=2) { runOnce(); }
+for(i=2; i < process.argv.length; i++){
+  argument = process.argv[i];
+  next_argument = process.argv[i+1];
+  invalid_syntax = true;
+  for (j=0; j<valid_arguments.length; j++){
+    if (valid_arguments[j]['name'].test(argument)){
+      invalid_syntax = false;
+      if (valid_arguments[j]['expected']){
+        //option requires a value, check if the provided match the expected syntax
+        if (!valid_arguments[j]['expected'].test(next_argument)){ 
+          invalidArgument(next_argument ? next_argument : argument, (next_argument==undefined));
+          break;
+        }
+        i++;
+      }
+      if (valid_arguments[j]['callback']) {
+        options_callbacks.push({
+          'callback': valid_arguments[j]['callback']
+          ,'argument': valid_arguments[j]['expected'] ? next_argument : null
+        });
+      }
+      continue;
+    }
+  }
+  if (invalid_syntax) { invalidArgument(argument); break; }
 }
+//execute all options callbacks
+options_callbacks.forEach(function(item){
+  item['callback'](item['argument'])
+});
 
 //== Manual
 function printHelp(){
@@ -98,9 +134,9 @@ function printHelp(){
   for(woeid in KNOWN_WOEIDS){
     woeids.push(woeid +' - '+KNOWN_WOEIDS[woeid]);
   }
-  var help_text = SCRIPT_TITLE+'\n\
-\nUsage:\
-\n\tnode '+ __filename.substring(__dirname.length+1, __filename.length) +' [option value] [option value] ...\
+  var help_text = '\
+Usage:\
+\n\tnode '+ __filename.substring(__dirname.length+1, __filename.length) +' [option value] [option value]…\
 \n\
 \nOptions:\
 \n\t-l/--location:\
@@ -113,6 +149,20 @@ function printHelp(){
 \n\
 \n\t\tFor an up-to-date list of locations provided by Twitter, access:\
 \n\t\t\tcurl http://api.twitter.com/1/trends/available.xml\
+\n\
+\nAuthor:\
+\n\tFabricio Campos Zuardi\
+\n\tTwitter: @fczuardi\
+\n\tWebsite: http://fabricio.org\
+\n\
+\nContributions:\
+\n\t'+SCRIPT_NAME+' is a Free Software released under the MIT License, which\
+\n\tmeans that you are welcome to copy, study and modify this software and, why not,\
+\n\teven contribute with improvements and bug fixes!\
+\n\
+\n\tThe code is hosted at '+SCRIPT_SOURCE_CODE_URL+'\
+\n\
+\nThanks for using it! :)\
 \n\n';
    
   printAndExit(help_text, 0);
@@ -120,18 +170,26 @@ function printHelp(){
 
 //== Default Header
 function printDefaultHeader(){
-  console.log(SCRIPT_TITLE+'\n\
-\nCheck the HELP page: node '+ __filename.substring(__dirname.length+1, __filename.length) +' -h\
-\n');
+  console.log(SCRIPT_TITLE);
+  if (process.argv.length == 2){
+    console.log('Check the HELP page: node '+ __filename.substring(__dirname.length+1, __filename.length) +' -h\n');
+  }
 }
 
 //= Functions
+
+//== runOnce()
 function runOnce(){
   options['run_once'] = true;
   getCurrentTrends('xml');
   // getCurrentTrends('json');
 }
 
+//== changeLocation()
+function changeLocation(location){
+  options.woeid = (KNOWN_COUNTRY_CODES[location])?(KNOWN_COUNTRY_CODES[location]):location;
+  runOnce();
+}
 //== init()
 function init(){
   //twitter sometimes stops updating the json list (http://twitter.com/fczuardi/status/21353558458)
@@ -277,6 +335,15 @@ function entitiesToChar(text){
   // Convert Decimal numeric character references ex: &#195; to Ã
   text = text.replace(/&#([0-9]{1,7});/g, function(match, submatch) { return String.fromCharCode(submatch);} );
   return text;
+}
+
+//== invalidArgument()
+function invalidArgument(arg, value_missing){
+  if (value_missing) {
+    printAndExit('Error: the argument '+arg+' requires a value.\n\n');
+  }else{
+    printAndExit('Error: the argument '+arg+' is not valid.\n\n');
+  }
 }
 
 //== responseError()
